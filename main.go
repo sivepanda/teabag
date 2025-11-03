@@ -111,10 +111,8 @@ func loadConfig(path string) (string, error) {
 	}
 
 	// Parse APPIMAGE_DIR="path"
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "APPIMAGE_DIR=") {
-			dir := strings.TrimPrefix(line, "APPIMAGE_DIR=")
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if dir, found := strings.CutPrefix(line, "APPIMAGE_DIR="); found {
 			dir = strings.Trim(dir, "\"")
 			return dir, nil
 		}
@@ -183,14 +181,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc":
 			return m, tea.Quit
 
-		case "up", "k":
+		case "up":
 			if m.currentStep == stepFileBrowser && m.cursor > 0 {
 				m.cursor--
 			}
 
-		case "down", "j":
+		case "down":
 			if m.currentStep == stepFileBrowser && m.cursor < len(m.files)-1 {
 				m.cursor++
+			}
+
+		case "k":
+			if m.currentStep == stepFileBrowser && m.cursor > 0 {
+				m.cursor--
+			} else if m.currentStep != stepProcessing && m.currentStep != stepComplete && m.currentStep != stepError && m.currentStep != stepFileBrowser {
+				m.input += msg.String()
+			}
+
+		case "j":
+			if m.currentStep == stepFileBrowser && m.cursor < len(m.files)-1 {
+				m.cursor++
+			} else if m.currentStep != stepProcessing && m.currentStep != stepComplete && m.currentStep != stepError && m.currentStep != stepFileBrowser {
+				m.input += msg.String()
 			}
 
 		case "enter":
