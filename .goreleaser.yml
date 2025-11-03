@@ -1,0 +1,50 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    binary: appimage-installer
+
+archives:
+  - format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+
+# Distribution packages
+nfpms:
+  - id: packages
+    package_name: appimage-installer
+    homepage: https://github.com/sivepanda/appimginstaller
+    maintainer: sivepanda
+    description: AppImage installer tool
+    license: MIT
+    formats:
+      - deb      # Debian/Ubuntu
+      - rpm      # RHEL/Fedora/CentOS
+      - archlinux # Arch Linux
+    bindir: /usr/bin
+    contents:
+      - src: ./README.md
+        dst: /usr/share/doc/appimage-installer/README.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
