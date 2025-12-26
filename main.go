@@ -400,36 +400,32 @@ func (m *model) install() tea.Cmd {
 
 	// Try without permissions (run with sudo)
 	cmd := exec.Command("cp", tmpDesktopFile, m.desktopFilePath)
-	if err := cmd.Run(); err != nil {
-		return func() tea.Msg {
-			return installCompleteMsg{err: fmt.Errorf("failed to copy desktop file: %w", err)}
-		}
-	}
+	if errnoperm := cmd.Run(); errnoperm != nil {
+		// Check if pkexec is available
+		if _, err := exec.LookPath("pkexec"); err == nil {
+			// Use pkexec (shows graphical prompt, doesn't interrupt TUI)
+			return func() tea.Msg {
+				// Copy desktop file
+				cmd := exec.Command("pkexec", "cp", tmpDesktopFile, m.desktopFilePath)
+				if err := cmd.Run(); err != nil {
+					return installCompleteMsg{err: fmt.Errorf("failed to copy desktop file: %w", err)}
+				}
 
-	// Check if pkexec is available
-	if _, err := exec.LookPath("pkexec"); err == nil {
-		// Use pkexec (shows graphical prompt, doesn't interrupt TUI)
-		return func() tea.Msg {
-			// Copy desktop file
-			cmd := exec.Command("pkexec", "cp", tmpDesktopFile, m.desktopFilePath)
-			if err := cmd.Run(); err != nil {
-				return installCompleteMsg{err: fmt.Errorf("failed to copy desktop file: %w", err)}
+				// Update desktop database
+				if _, err := exec.LookPath("update-desktop-database"); err == nil {
+					cmd := exec.Command("pkexec", "update-desktop-database", desktopDir)
+					cmd.Run() // Ignore errors
+				}
+
+				m.message = fmt.Sprintf("Installation complete! %s should now appear in your application launcher", m.appName)
+				return installCompleteMsg{err: nil}
 			}
-
-			// Update desktop database
-			if _, err := exec.LookPath("update-desktop-database"); err == nil {
-				cmd := exec.Command("pkexec", "update-desktop-database", desktopDir)
-				cmd.Run() // Ignore errors
-			}
-
-			m.message = fmt.Sprintf("Installation complete! %s should now appear in your application launcher", m.appName)
-			return installCompleteMsg{err: nil}
 		}
-	}
 
+	}
 	// Permission denied, rerun with sudo
 	return func() tea.Msg {
-		return installCompleteMsg{err: fmt.Errorf("Installation requires administrator privileges. \n\n Rerun with sudo or pkexec.", err)}
+		return installCompleteMsg{err: fmt.Errorf("Installation requires administrator privileges. \n\n Rerun with sudo or pkexec.\n%w", err)}
 	}
 }
 
