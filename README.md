@@ -1,4 +1,4 @@
-# AppImage Installer
+# Teabag
 
 A Terminal User Interface (TUI) application built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) to manage AppImage files. Moves AppImages to a centralized directory and creates desktop entries for easy access through your application launcher.
 
@@ -9,7 +9,7 @@ A Terminal User Interface (TUI) application built with [Bubble Tea](https://gith
 - **Desktop Integration**: Automatically creates `.desktop` files in `/usr/share/applications`
 - **Customizable Metadata**: Set application name, description, icon, and categories
 - **First-Time Setup**: Guided configuration for AppImage storage location
-- **Persistent Configuration**: Saves preferences to `~/.config/appimage-installer.conf`
+- **Persistent Configuration**: Saves preferences to `~/.config/teabag.conf`
 - **Beautiful TUI**: Clean, colorful interface with keyboard navigation
 
 ## Requirements
@@ -23,13 +23,13 @@ A Terminal User Interface (TUI) application built with [Bubble Tea](https://gith
 
 ```bash
 git clone <repository-url>
-cd appimginstaller
-go build -o appimage-installer
+cd teabag 
+go build -o teabag
 ```
 
 Optionally install system-wide:
 ```bash
-sudo mv appimage-installer /usr/local/bin/
+sudo mv teabag /usr/local/bin/
 ```
 
 ## Usage
@@ -39,7 +39,7 @@ sudo mv appimage-installer /usr/local/bin/
 Launch without arguments to browse and select an AppImage:
 
 ```bash
-./appimage-installer
+./teabag
 ```
 
 **Navigation:**
@@ -53,7 +53,7 @@ Launch without arguments to browse and select an AppImage:
 Specify an AppImage path directly:
 
 ```bash
-./appimage-installer /path/to/app.AppImage
+./teabag /path/to/app.AppImage
 ```
 
 ### Installation Process
@@ -74,7 +74,7 @@ Specify an AppImage path directly:
 
 ## Configuration
 
-Configuration is stored in `~/.config/appimage-installer.conf`:
+Configuration is stored in `~/.config/teabag.conf`:
 
 ```
 APPIMAGE_DIR="/home/user/Applications"
@@ -83,9 +83,9 @@ APPIMAGE_DIR="/home/user/Applications"
 ## Example
 
 ```bash
-$ ./appimage-installer ~/Downloads/MyApp.AppImage
+$ ./teabag ~/Downloads/MyApp.AppImage
 
-AppImage Installer
+Teabag
 
 Installing: MyApp.AppImage
 

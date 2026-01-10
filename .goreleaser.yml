@@ -12,7 +12,7 @@ builds:
     goarch:
       - amd64
       - arm64
-    binary: appimage-installer
+    binary: teabag
 
 archives:
   - format: tar.gz
@@ -25,8 +25,8 @@ archives:
 # Distribution packages
 nfpms:
   - id: packages
-    package_name: appimage-installer
-    homepage: https://github.com/sivepanda/appimginstaller
+    package_name: teabag
+    homepage: https://github.com/sivepanda/teabag
     maintainer: sivepanda
     description: AppImage installer tool
     license: MIT
@@ -37,7 +37,7 @@ nfpms:
     bindir: /usr/bin
     contents:
       - src: ./README.md
-        dst: /usr/share/doc/appimage-installer/README.md
+        dst: /usr/share/doc/teabag/README.md
 
 checksum:
   name_template: 'checksums.txt'

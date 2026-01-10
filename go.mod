@@ -1,4 +1,4 @@
-module appimage-installer
+module teabag
 
 go 1.25.1
 

@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	configFile = ".config/appimage-installer.conf"
+	configFile = ".config/teabag.conf"
 )
 
 type step int
