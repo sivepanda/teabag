@@ -472,6 +472,10 @@ func (m model) handleEnter() (model, tea.Cmd) {
 			}
 		}
 		m.iconPath = m.input
+		m.currentStep = stepCategories
+		m.input = "Utility;"
+		m.error = ""
+		return m, nil
 
 	case stepIconBrowser:
 		if len(m.files) == 0 {
