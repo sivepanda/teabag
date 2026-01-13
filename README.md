@@ -19,6 +19,10 @@ A Terminal User Interface (TUI) application built with [Bubble Tea](https://gith
 
 ## Installation
 
+### From AUR
+This package is available on the AUR as [teabag-bin](https://aur.archlinux.org/packages/teabag-bin). Use an AUR helper like [yay](https://github.com/Jguer/yay) to install!
+`yay -S teabag-bin`
+
 ### From Source
 
 ```bash
