@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/sahilm/fuzzy"
 )
 
 const (
@@ -23,6 +24,7 @@ const (
 	stepAppName
 	stepDescription
 	stepIcon
+	stepIconBrowser
 	stepCategories
 	stepProcessing
 	stepComplete
@@ -62,9 +64,13 @@ type model struct {
 	desktopFilePath string
 
 	// File browser fields
-	currentDir string
-	files      []fileEntry
-	cursor     int
+	currentDir   string
+	files        []fileEntry
+	allFiles     []fileEntry // Unfiltered list for fuzzy search
+	cursor       int
+	searchMode   bool
+	searchQuery  string
+	fuzzyMatches []fuzzy.Match
 }
 
 func initialModel(appImagePath string) model {
@@ -131,9 +137,33 @@ func saveConfig(path, appImageDir string) error {
 	return os.WriteFile(path, []byte(content), 0644)
 }
 
+// isImageFile checks if a filename has a common image extension
+func isImageFile(name string) bool {
+	lower := strings.ToLower(name)
+	extensions := []string{".png", ".jpg", ".jpeg", ".svg", ".ico", ".xpm", ".bmp", ".gif", ".webp"}
+	for _, ext := range extensions {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *model) loadDirectory() {
+	m.loadDirectoryWithFilter(false)
+}
+
+func (m *model) loadIconDirectory() {
+	m.loadDirectoryWithFilter(true)
+}
+
+func (m *model) loadDirectoryWithFilter(iconMode bool) {
+	m.allFiles = []fileEntry{}
 	m.files = []fileEntry{}
 	m.cursor = 0
+	m.searchMode = false
+	m.searchQuery = ""
+	m.fuzzyMatches = nil
 
 	entries, err := os.ReadDir(m.currentDir)
 	if err != nil {
@@ -143,30 +173,70 @@ func (m *model) loadDirectory() {
 
 	// Add parent directory entry if not at root
 	if m.currentDir != "/" {
-		m.files = append(m.files, fileEntry{
+		m.allFiles = append(m.allFiles, fileEntry{
 			name:  "..",
 			path:  filepath.Dir(m.currentDir),
 			isDir: true,
 		})
 	}
 
-	// Add directories and AppImage files
+	// Add directories and matching files
 	for _, entry := range entries {
 		fullPath := filepath.Join(m.currentDir, entry.Name())
 
 		if entry.IsDir() {
-			m.files = append(m.files, fileEntry{
+			m.allFiles = append(m.allFiles, fileEntry{
 				name:  entry.Name(),
 				path:  fullPath,
 				isDir: true,
 			})
-		} else if strings.HasSuffix(strings.ToLower(entry.Name()), ".appimage") {
-			m.files = append(m.files, fileEntry{
+		} else if iconMode && isImageFile(entry.Name()) {
+			m.allFiles = append(m.allFiles, fileEntry{
+				name:  entry.Name(),
+				path:  fullPath,
+				isDir: false,
+			})
+		} else if !iconMode && strings.HasSuffix(strings.ToLower(entry.Name()), ".appimage") {
+			m.allFiles = append(m.allFiles, fileEntry{
 				name:  entry.Name(),
 				path:  fullPath,
 				isDir: false,
 			})
 		}
+	}
+
+	m.files = m.allFiles
+}
+
+// fileEntrySource implements fuzzy.Source for file entries
+type fileEntrySource []fileEntry
+
+func (f fileEntrySource) String(i int) string {
+	return f[i].name
+}
+
+func (f fileEntrySource) Len() int {
+	return len(f)
+}
+
+func (m *model) applyFuzzySearch() {
+	if m.searchQuery == "" {
+		m.files = m.allFiles
+		m.fuzzyMatches = nil
+		m.cursor = 0
+		return
+	}
+
+	matches := fuzzy.FindFrom(m.searchQuery, fileEntrySource(m.allFiles))
+	m.fuzzyMatches = matches
+
+	m.files = []fileEntry{}
+	for _, match := range matches {
+		m.files = append(m.files, m.allFiles[match.Index])
+	}
+
+	if m.cursor >= len(m.files) {
+		m.cursor = max(0, len(m.files)-1)
 	}
 }
 
@@ -174,54 +244,33 @@ func (m model) Init() tea.Cmd {
 	return nil
 }
 
+func (m *model) isFileBrowserStep() bool {
+	return m.currentStep == stepFileBrowser || m.currentStep == stepIconBrowser
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle file browser steps (AppImage browser and Icon browser)
+		if m.isFileBrowserStep() {
+			return m.handleFileBrowserKeys(msg)
+		}
+
 		switch msg.String() {
 		case "ctrl+c", "esc":
 			return m, tea.Quit
-
-		case "up":
-			if m.currentStep == stepFileBrowser && m.cursor > 0 {
-				m.cursor--
-			}
-
-		case "down":
-			if m.currentStep == stepFileBrowser && m.cursor < len(m.files)-1 {
-				m.cursor++
-			}
-
-		case "k":
-			if m.currentStep == stepFileBrowser && m.cursor > 0 {
-				m.cursor--
-			} else if m.currentStep != stepProcessing && m.currentStep != stepComplete && m.currentStep != stepError && m.currentStep != stepFileBrowser {
-				m.input += msg.String()
-			}
-
-		case "j":
-			if m.currentStep == stepFileBrowser && m.cursor < len(m.files)-1 {
-				m.cursor++
-			} else if m.currentStep != stepProcessing && m.currentStep != stepComplete && m.currentStep != stepError && m.currentStep != stepFileBrowser {
-				m.input += msg.String()
-			}
 
 		case "enter":
 			newModel, cmd := m.handleEnter()
 			return newModel, cmd
 
 		case "backspace":
-			if m.currentStep == stepFileBrowser {
-				// Go to parent directory
-				if m.currentDir != "/" {
-					m.currentDir = filepath.Dir(m.currentDir)
-					m.loadDirectory()
-				}
-			} else if len(m.input) > 0 {
+			if len(m.input) > 0 {
 				m.input = m.input[:len(m.input)-1]
 			}
 
 		default:
-			if m.currentStep != stepProcessing && m.currentStep != stepComplete && m.currentStep != stepError && m.currentStep != stepFileBrowser {
+			if m.currentStep != stepProcessing && m.currentStep != stepComplete && m.currentStep != stepError {
 				m.input += msg.String()
 			}
 		}
@@ -234,6 +283,101 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentStep = stepComplete
 		}
 		return m, nil
+	}
+
+	return m, nil
+}
+
+func (m model) handleFileBrowserKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+
+	// In search mode, handle typing
+	if m.searchMode {
+		switch key {
+		case "ctrl+c":
+			return m, tea.Quit
+		case "esc":
+			// Exit search mode
+			m.searchMode = false
+			m.searchQuery = ""
+			m.files = m.allFiles
+			m.fuzzyMatches = nil
+			m.cursor = 0
+			return m, nil
+		case "enter":
+			// Select current item and exit search mode
+			m.searchMode = false
+			return m.handleEnter()
+		case "backspace":
+			if len(m.searchQuery) > 0 {
+				m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+				m.applyFuzzySearch()
+			}
+			return m, nil
+		case "up":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+			return m, nil
+		case "down":
+			if m.cursor < len(m.files)-1 {
+				m.cursor++
+			}
+			return m, nil
+		default:
+			// Add character to search query
+			if len(key) == 1 {
+				m.searchQuery += key
+				m.applyFuzzySearch()
+			}
+			return m, nil
+		}
+	}
+
+	// Not in search mode
+	switch key {
+	case "ctrl+c", "esc":
+		return m, tea.Quit
+
+	case "/":
+		// Enter search mode
+		m.searchMode = true
+		m.searchQuery = ""
+		return m, nil
+
+	case "up":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+
+	case "down":
+		if m.cursor < len(m.files)-1 {
+			m.cursor++
+		}
+
+	case "k":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+
+	case "j":
+		if m.cursor < len(m.files)-1 {
+			m.cursor++
+		}
+
+	case "enter":
+		return m.handleEnter()
+
+	case "backspace":
+		// Go to parent directory
+		if m.currentDir != "/" {
+			m.currentDir = filepath.Dir(m.currentDir)
+			if m.currentStep == stepIconBrowser {
+				m.loadIconDirectory()
+			} else {
+				m.loadDirectory()
+			}
+		}
 	}
 
 	return m, nil
@@ -312,6 +456,15 @@ func (m model) handleEnter() (model, tea.Cmd) {
 		m.input = ""
 
 	case stepIcon:
+		// Check if user wants to browse for icon
+		if m.input == "b" || m.input == "B" {
+			homeDir, _ := os.UserHomeDir()
+			m.currentDir = homeDir
+			m.currentStep = stepIconBrowser
+			m.input = ""
+			m.loadIconDirectory()
+			return m, nil
+		}
 		if m.input != "" {
 			if _, err := os.Stat(m.input); os.IsNotExist(err) {
 				m.error = fmt.Sprintf("Warning: Icon file not found: %s", m.input)
@@ -319,9 +472,25 @@ func (m model) handleEnter() (model, tea.Cmd) {
 			}
 		}
 		m.iconPath = m.input
-		m.currentStep = stepCategories
-		m.input = "Utility;"
-		m.error = ""
+
+	case stepIconBrowser:
+		if len(m.files) == 0 {
+			return m, nil
+		}
+
+		selected := m.files[m.cursor]
+		if selected.isDir {
+			// Navigate into directory
+			m.currentDir = selected.path
+			m.loadIconDirectory()
+		} else {
+			// Image file selected
+			m.iconPath = selected.path
+			m.currentStep = stepCategories
+			m.input = "Utility;"
+			m.error = ""
+		}
+		return m, nil
 
 	case stepCategories:
 		if m.input == "" {
@@ -432,14 +601,24 @@ func (m *model) install() tea.Cmd {
 func (m model) View() string {
 	var s strings.Builder
 
-	s.WriteString(titleStyle.Render("AppImage Installer") + "\n\n")
+	s.WriteString(titleStyle.Render("Teabag - AppImage Installer") + "\n\n")
 
 	switch m.currentStep {
 	case stepFileBrowser:
-		s.WriteString(fmt.Sprintf("Current directory: %s\n\n", m.currentDir))
+		s.WriteString(fmt.Sprintf("Current directory: %s\n", m.currentDir))
+
+		if m.searchMode {
+			s.WriteString(fmt.Sprintf("Search: %s▌\n\n", m.searchQuery))
+		} else {
+			s.WriteString("\n")
+		}
 
 		if len(m.files) == 0 {
-			s.WriteString(infoStyle.Render("No .appimage files or directories found") + "\n")
+			if m.searchMode && m.searchQuery != "" {
+				s.WriteString(infoStyle.Render("No matches found") + "\n")
+			} else {
+				s.WriteString(infoStyle.Render("No .appimage files or directories found") + "\n")
+			}
 		} else {
 			for i, file := range m.files {
 				cursor := " "
@@ -460,7 +639,11 @@ func (m model) View() string {
 			}
 		}
 
-		s.WriteString("\n(↑/↓ or j/k: navigate, Enter: select, Backspace: parent dir, Ctrl+C: quit)")
+		if m.searchMode {
+			s.WriteString("\n(Type to search, ↑/↓: navigate, Enter: select, Esc: cancel, Ctrl+C: quit)")
+		} else {
+			s.WriteString("\n(↑/↓ or j/k: navigate, /: search, Enter: select, Backspace: parent dir, Ctrl+C: quit)")
+		}
 
 	case stepAppImageDir:
 		s.WriteString(infoStyle.Render("First-time setup: Configure AppImage storage location") + "\n\n")
@@ -482,11 +665,52 @@ func (m model) View() string {
 
 	case stepIcon:
 		s.WriteString(fmt.Sprintf("Installing: %s\n\n", filepath.Base(m.appImagePath)))
-		s.WriteString(fmt.Sprintf("Icon path (optional, press Enter to skip): %s\n", m.input))
+		s.WriteString(fmt.Sprintf("Icon path (optional, type 'b' to browse): %s\n", m.input))
 		if m.error != "" {
 			s.WriteString("\n" + errorStyle.Render("✗ "+m.error))
 		}
-		s.WriteString("\n(Press Enter to continue, Ctrl+C to quit)")
+		s.WriteString("\n(Enter path, 'b' to browse, or Enter to skip)")
+
+	case stepIconBrowser:
+		s.WriteString(fmt.Sprintf("Browsing for icon - Current directory: %s\n", m.currentDir))
+
+		if m.searchMode {
+			s.WriteString(fmt.Sprintf("Search: %s▌\n\n", m.searchQuery))
+		} else {
+			s.WriteString("\n")
+		}
+
+		if len(m.files) == 0 {
+			if m.searchMode && m.searchQuery != "" {
+				s.WriteString(infoStyle.Render("No matches found") + "\n")
+			} else {
+				s.WriteString(infoStyle.Render("No image files or directories found") + "\n")
+			}
+		} else {
+			for i, file := range m.files {
+				cursor := " "
+				if i == m.cursor {
+					cursor = ">"
+				}
+
+				icon := "🖼️"
+				if file.isDir {
+					icon = "📁"
+				}
+
+				line := fmt.Sprintf("%s %s %s", cursor, icon, file.name)
+				if i == m.cursor {
+					line = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true).Render(line)
+				}
+				s.WriteString(line + "\n")
+			}
+		}
+
+		if m.searchMode {
+			s.WriteString("\n(Type to search, ↑/↓: navigate, Enter: select, Esc: cancel, Ctrl+C: quit)")
+		} else {
+			s.WriteString("\n(↑/↓ or j/k: navigate, /: search, Enter: select, Backspace: parent dir, Ctrl+C: quit)")
+		}
 
 	case stepCategories:
 		s.WriteString(fmt.Sprintf("Installing: %s\n\n", filepath.Base(m.appImagePath)))

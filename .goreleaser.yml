@@ -28,16 +28,27 @@ nfpms:
     package_name: teabag
     homepage: https://github.com/sivepanda/teabag
     maintainer: sivepanda
-    description: AppImage installer tool
+    description: TUI AppImage installer tool
     license: MIT
     formats:
-      - deb      # Debian/Ubuntu
-      - rpm      # RHEL/Fedora/CentOS
-      - archlinux # Arch Linux
+      - deb
+      - rpm
+      - archlinux
     bindir: /usr/bin
-    contents:
-      - src: ./README.md
-        dst: /usr/share/doc/teabag/README.md
+
+aurs:
+  - name: teabag-bin
+    private_key: "{{ .Env.AUR_SSH_PRIVATE_KEY }}"
+    git_url: "ssh://aur@aur.archlinux.org/teabag-bin.git"
+    skip_upload: auto
+    homepage: https://github.com/sivepanda/teabag
+    description: TUI AppImage installer tool
+    maintainers:
+      - sivepanda
+    license: MIT
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
 
 checksum:
   name_template: 'checksums.txt'
@@ -48,3 +59,4 @@ changelog:
     exclude:
       - '^docs:'
       - '^test:'
+
