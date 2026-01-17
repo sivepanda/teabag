@@ -1,2 +1,5 @@
 # Carya directory
 .carya/
+
+# Built images
+*/carya
